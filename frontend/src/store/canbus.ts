@@ -88,7 +88,7 @@ export const useCanBusStore = defineStore('canbus', () => {
   function clearFrames() {
     frames.value = [];
     signals.value = new Map();
-    selectedSignals.value.clear();
+    selectedSignals.value = new Set();
     busStats.value = {
       totalFrames: 0,
       rxCount: 0,
@@ -101,15 +101,17 @@ export const useCanBusStore = defineStore('canbus', () => {
   }
 
   function toggleSignal(name: string) {
-    if (selectedSignals.value.has(name)) {
-      selectedSignals.value.delete(name);
+    const next = new Set(selectedSignals.value);
+    if (next.has(name)) {
+      next.delete(name);
     } else {
-      selectedSignals.value.add(name);
+      next.add(name);
     }
+    selectedSignals.value = next;
   }
 
   function clearSelectedSignals() {
-    selectedSignals.value.clear();
+    selectedSignals.value = new Set();
   }
 
   function loadMockDbc() {

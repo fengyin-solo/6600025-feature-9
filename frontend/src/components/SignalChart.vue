@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue';
+import { computed, watch, ref, nextTick } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -17,7 +17,21 @@ const store = useCanBusStore();
 const chartRef = ref<InstanceType<typeof VChart> | null>(null);
 
 function handleLegendClick(params: any) {
-  store.toggleSignal(params.name);
+  const clickedName = typeof params.name === 'string' ? params.name : (params as any).batch?.[0]?.name;
+  if (clickedName) {
+    store.toggleSignal(clickedName);
+  }
+  nextTick(() => {
+    if (chartRef.value?.chart) {
+      const allSignals = Array.from(store.signals.keys());
+      for (const name of allSignals) {
+        chartRef.value.chart.dispatchAction({
+          type: 'legendSelect',
+          name
+        });
+      }
+    }
+  });
 }
 
 const chartOption = computed(() => {
@@ -36,6 +50,11 @@ const chartOption = computed(() => {
     itemStyle: { color: colors[idx % colors.length] },
     data: sig.data.map(d => [d.time, d.value])
   }));
+
+  const legendSelected: Record<string, boolean> = {};
+  for (const [name] of signalEntries) {
+    legendSelected[name] = true;
+  }
 
   return {
     backgroundColor: '#111827',
@@ -68,7 +87,8 @@ const chartOption = computed(() => {
       },
       itemWidth: 12,
       itemHeight: 2,
-      selectedMode: 'multiple'
+      selectedMode: true,
+      selected: legendSelected
     },
     grid: {
       left: 60,
