@@ -8,6 +8,7 @@ let frameIdCounter = 0;
 export const useCanBusStore = defineStore('canbus', () => {
   const frames = ref<CanFrame[]>([]);
   const signals = ref<Map<string, { name: string; data: { time: number; value: number }[] }>>(new Map());
+  const selectedSignals = ref<Set<string>>(new Set());
   const dbcMessages = ref<Map<number, DbcMessage>>(new Map());
   const filterId = ref('');
   const filterText = ref('');
@@ -87,6 +88,7 @@ export const useCanBusStore = defineStore('canbus', () => {
   function clearFrames() {
     frames.value = [];
     signals.value = new Map();
+    selectedSignals.value.clear();
     busStats.value = {
       totalFrames: 0,
       rxCount: 0,
@@ -96,6 +98,18 @@ export const useCanBusStore = defineStore('canbus', () => {
       lastUpdate: Date.now()
     };
     frameIdCounter = 0;
+  }
+
+  function toggleSignal(name: string) {
+    if (selectedSignals.value.has(name)) {
+      selectedSignals.value.delete(name);
+    } else {
+      selectedSignals.value.add(name);
+    }
+  }
+
+  function clearSelectedSignals() {
+    selectedSignals.value.clear();
   }
 
   function loadMockDbc() {
@@ -185,20 +199,48 @@ export const useCanBusStore = defineStore('canbus', () => {
     return decodeCanFrame(frame, msgDef);
   }
 
-  function exportFrames(): string {
-    const header = 'Timestamp,Direction,CAN_ID,DLC,Data,Decoded\n';
-    const rows = frames.value.map(f => {
-      const decodedStr = Object.entries(f.decoded)
-        .map(([k, v]) => `${k}=${v}`)
-        .join('; ');
-      return `${f.timestamp},${f.direction},0x${f.arbitrationId.toString(16).toUpperCase()},${f.dlc},"${f.data}","${decodedStr}"`;
+  interface ExportOptions {
+    useFiltered?: boolean;
+    selectedSignalsOnly?: boolean;
+  }
+
+  function exportFrames(options: ExportOptions = {}): string {
+    const { useFiltered = false, selectedSignalsOnly = false } = options;
+
+    const sourceFrames = useFiltered ? filteredFrames.value : frames.value;
+
+    const signalList = selectedSignalsOnly && selectedSignals.value.size > 0
+      ? Array.from(selectedSignals.value)
+      : null;
+
+    const header = signalList
+      ? `Timestamp,Direction,CAN_ID,DLC,Data,${signalList.join(',')}\n`
+      : 'Timestamp,Direction,CAN_ID,DLC,Data,Decoded\n';
+
+    const rows = sourceFrames.map(f => {
+      let decodedStr: string;
+      if (signalList) {
+        const signalValues = signalList.map(sig => {
+          const val = f.decoded[sig];
+          return val !== undefined ? String(val) : '';
+        });
+        decodedStr = signalValues.join(',');
+      } else {
+        decodedStr = Object.entries(f.decoded)
+          .map(([k, v]) => `${k}=${v}`)
+          .join('; ');
+        decodedStr = `"${decodedStr}"`;
+      }
+      return `${f.timestamp},${f.direction},0x${f.arbitrationId.toString(16).toUpperCase()},${f.dlc},"${f.data}",${decodedStr}`;
     }).join('\n');
+
     return header + rows;
   }
 
   return {
     frames,
     signals,
+    selectedSignals,
     dbcMessages,
     filterId,
     filterText,
@@ -213,6 +255,8 @@ export const useCanBusStore = defineStore('canbus', () => {
     startCapture,
     stopCapture,
     decodeFrame,
+    toggleSignal,
+    clearSelectedSignals,
     exportFrames
   };
 });

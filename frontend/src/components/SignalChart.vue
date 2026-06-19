@@ -16,6 +16,10 @@ use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent
 const store = useCanBusStore();
 const chartRef = ref<InstanceType<typeof VChart> | null>(null);
 
+function handleLegendClick(params: any) {
+  store.toggleSignal(params.name);
+}
+
 const chartOption = computed(() => {
   const signalEntries = Array.from(store.signals.entries());
 
@@ -25,7 +29,10 @@ const chartOption = computed(() => {
     type: 'line' as const,
     smooth: true,
     symbol: 'none',
-    lineStyle: { width: 2 },
+    lineStyle: { 
+      width: store.selectedSignals.size === 0 || store.selectedSignals.has(name) ? 2 : 1,
+      opacity: store.selectedSignals.size === 0 || store.selectedSignals.has(name) ? 1 : 0.3
+    },
     itemStyle: { color: colors[idx % colors.length] },
     data: sig.data.map(d => [d.time, d.value])
   }));
@@ -52,9 +59,16 @@ const chartOption = computed(() => {
     },
     legend: {
       top: 8,
-      textStyle: { color: '#9ca3af', fontSize: 11 },
+      textStyle: { 
+        color: '#9ca3af', 
+        fontSize: 11,
+        formatter: (name: string) => {
+          return store.selectedSignals.has(name) ? `✓ ${name}` : name;
+        }
+      },
       itemWidth: 12,
-      itemHeight: 2
+      itemHeight: 2,
+      selectedMode: 'multiple'
     },
     grid: {
       left: 60,
@@ -90,9 +104,20 @@ const chartOption = computed(() => {
   <div class="flex flex-col h-full bg-gray-900 rounded-lg overflow-hidden">
     <div class="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
       <h3 class="text-sm font-semibold text-gray-300">信号趋势图</h3>
-      <span class="text-xs text-gray-500">
-        {{ store.signals.size }} 个信号活跃
-      </span>
+      <div class="flex items-center gap-3">
+        <span v-if="store.selectedSignals.size > 0" class="text-xs text-cyan-400">
+          已选 {{ store.selectedSignals.size }} 个信号
+          <button
+            @click="store.clearSelectedSignals()"
+            class="ml-2 text-gray-400 hover:text-gray-200 underline"
+          >
+            清除
+          </button>
+        </span>
+        <span class="text-xs text-gray-500">
+          {{ store.signals.size }} 个信号活跃
+        </span>
+      </div>
     </div>
     <div class="flex-1 p-2">
       <VChart
@@ -101,6 +126,7 @@ const chartOption = computed(() => {
         autoresize
         class="w-full h-full"
         style="min-height: 200px;"
+        @legendselectchanged="handleLegendClick"
       />
     </div>
     <div v-if="store.signals.size === 0" class="absolute inset-0 flex items-center justify-center pointer-events-none">

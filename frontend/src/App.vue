@@ -1,24 +1,58 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useCanBusStore } from './store/canbus';
 import FrameTable from './components/FrameTable.vue';
 import SignalChart from './components/SignalChart.vue';
 
 const store = useCanBusStore();
+const showExportMenu = ref(false);
+const exportMenuRef = ref<HTMLDivElement | null>(null);
+
+function handleClickOutside(event: MouseEvent) {
+  if (exportMenuRef.value && !exportMenuRef.value.contains(event.target as Node)) {
+    showExportMenu.value = false;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 
 function handleLoadDbc() {
   store.loadMockDbc();
   alert(`已加载 DBC 定义: ${store.dbcMessages.size} 条消息`);
 }
 
-function handleExport() {
-  const csv = store.exportFrames();
+function handleExport(useFiltered: boolean = false, selectedSignalsOnly: boolean = false) {
+  if (selectedSignalsOnly && store.selectedSignals.size === 0) {
+    alert('请先在信号趋势图中选择要导出的信号（点击图例）');
+    showExportMenu.value = false;
+    return;
+  }
+
+  const csv = store.exportFrames({ useFiltered, selectedSignalsOnly });
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
+  
+  let suffix = 'all';
+  if (useFiltered && selectedSignalsOnly) {
+    suffix = 'filtered_selected';
+  } else if (useFiltered) {
+    suffix = 'filtered';
+  } else if (selectedSignalsOnly) {
+    suffix = 'selected';
+  }
+  
   a.href = url;
-  a.download = `can_frames_${Date.now()}.csv`;
+  a.download = `can_frames_${suffix}_${Date.now()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+  showExportMenu.value = false;
 }
 </script>
 
@@ -57,12 +91,56 @@ function handleExport() {
         >
           清除
         </button>
-        <button
-          @click="handleExport"
-          class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded transition-colors border border-gray-600"
-        >
-          导出CSV
-        </button>
+        <div class="relative" ref="exportMenuRef">
+          <button
+            @click="showExportMenu = !showExportMenu"
+            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded transition-colors border border-gray-600 flex items-center gap-1"
+          >
+            导出CSV
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            v-if="showExportMenu"
+            class="absolute right-0 top-full mt-1 w-60 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 py-1"
+          >
+            <button
+              @click="handleExport(false, false)"
+              class="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
+            >
+              <div class="font-medium">导出全部帧</div>
+              <div class="text-xs text-gray-400">导出所有 {{ store.frames.length }} 条帧数据</div>
+            </button>
+            <button
+              @click="handleExport(true, false)"
+              class="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
+            >
+              <div class="font-medium">导出筛选结果</div>
+              <div class="text-xs text-gray-400">仅导出当前筛选的 {{ store.filteredFrames.length }} 条帧</div>
+            </button>
+            <button
+              @click="handleExport(false, true)"
+              class="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 transition-colors"
+              :class="{ 'opacity-50 cursor-not-allowed': store.selectedSignals.size === 0 }"
+            >
+              <div class="font-medium">导出选中信号</div>
+              <div class="text-xs text-gray-400">
+                {{ store.selectedSignals.size > 0 ? `已选 ${store.selectedSignals.size} 个信号，每列为单独字段` : '请先点击图例选择信号' }}
+              </div>
+            </button>
+            <button
+              @click="handleExport(true, true)"
+              class="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-700 transition-colors border-t border-gray-700"
+              :class="{ 'opacity-50 cursor-not-allowed': store.selectedSignals.size === 0 }"
+            >
+              <div class="font-medium">筛选结果 + 选中信号</div>
+              <div class="text-xs text-gray-400">
+                {{ store.selectedSignals.size > 0 ? `筛选帧中导出 ${store.selectedSignals.size} 个信号` : '请先点击图例选择信号' }}
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
